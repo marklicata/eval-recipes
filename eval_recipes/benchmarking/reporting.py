@@ -4,6 +4,7 @@ import inspect
 import json
 import os
 from pathlib import Path
+import platform
 import shutil
 import tempfile
 
@@ -80,6 +81,10 @@ async def generate_task_report(
     Generate detailed failure analysis reports for a benchmark task.
     Generates a separate report for each non-perfect trial.
 
+    Note: Report generation using Claude SDK is not currently supported on Windows
+    due to SDK initialization issues when system prompts are provided. Use WSL or
+    Linux/Mac for report generation, or disable by setting report_score_threshold=100.
+
     Args:
         benchmark_output_dir: Path to the benchmark run directory containing logs
         task_directory: Path to the task directory containing instructions.txt
@@ -88,6 +93,14 @@ async def generate_task_report(
     Creates:
         FAILURE_REPORT_trial_N.md in trial_N/ subdirectories for trials scoring below threshold
     """
+    # SDK-based report generation is not supported on Windows
+    if platform.system() == "Windows":
+        logger.warning(
+            "Task report generation is not supported on Windows due to Claude SDK limitations. "
+            "Use WSL, Linux, or Mac for report generation, or run benchmarks without reports by setting "
+            "report_score_threshold=100 in your benchmark configuration."
+        )
+        return
     # Get task name from directory name
     task_name = task_directory.name
 
@@ -371,12 +384,24 @@ async def generate_summary_report(benchmarks_output_dir: Path) -> None:
     This function now creates a separate consolidated report for each agent found
     in the benchmark run directory.
 
+    Note: Report generation using Claude SDK is not currently supported on Windows
+    due to SDK initialization issues when system prompts are provided. Use WSL or
+    Linux/Mac for report generation.
+
     Args:
         benchmarks_output_dir: Directory containing benchmark run outputs with FAILURE_REPORT.md files
 
     Creates:
         CONSOLIDATED_REPORT_{agent_name}.md files for each agent in benchmarks_output_dir
     """
+    # SDK-based report generation is not supported on Windows
+    if platform.system() == "Windows":
+        logger.warning(
+            "Consolidated report generation is not supported on Windows due to Claude SDK limitations. "
+            "Use WSL, Linux, or Mac for report generation."
+        )
+        return
+
     # Group failure reports by agent
     agent_reports = _group_reports_by_agent(benchmarks_output_dir)
 
