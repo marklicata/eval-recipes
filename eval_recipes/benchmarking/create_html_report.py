@@ -78,7 +78,7 @@ def _load_task_results(benchmarks_output_dir: Path, tasks_directory: Path) -> li
         if not aggregated_results_path.exists():
             continue
 
-        with aggregated_results_path.open() as f:
+        with aggregated_results_path.open(encoding="utf-8") as f:
             aggregated_data = json.load(f)
 
         mean_score = aggregated_data.get("mean_score", 0.0)
@@ -105,7 +105,7 @@ def _load_task_results(benchmarks_output_dir: Path, tasks_directory: Path) -> li
         task_yaml_data = {}
         task_yaml_path = task_dir_path / "task.yaml"
         if task_yaml_path.exists():
-            with task_yaml_path.open() as f:
+            with task_yaml_path.open(encoding="utf-8") as f:
                 task_yaml_data = yaml.safe_load(f) or {}
 
         # Attach failure reports to each trial
@@ -115,7 +115,7 @@ def _load_task_results(benchmarks_output_dir: Path, tasks_directory: Path) -> li
             report_path = trial_dir / f"FAILURE_REPORT_trial_{trial_num}.md"
 
             if report_path.exists():
-                trial["failure_report"] = report_path.read_text()
+                trial["failure_report"] = report_path.read_text(encoding="utf-8")
             else:
                 trial["failure_report"] = None
 
@@ -280,7 +280,7 @@ def _generate_html(results: list[TaskResult], benchmarks_output_dir: Path) -> st
     consolidated_reports: dict[str, str] = {}
     for report_path in benchmarks_output_dir.glob("CONSOLIDATED_REPORT_*.md"):
         agent_name = report_path.stem.replace("CONSOLIDATED_REPORT_", "")
-        consolidated_reports[agent_name] = report_path.read_text()
+        consolidated_reports[agent_name] = report_path.read_text(encoding="utf-8")
 
     # Group results by agent
     agent_results = _group_results_by_agent(results)

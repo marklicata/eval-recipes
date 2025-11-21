@@ -98,7 +98,7 @@ class Harness:
             if not install_file.exists() or not command_template_file.exists() or not agent_yaml_file.exists():
                 continue
 
-            with agent_yaml_file.open() as f:
+            with agent_yaml_file.open(encoding="utf-8") as f:
                 agent_yaml = yaml.safe_load(f) or {}
 
             # Handle local_source_path if specified
@@ -161,7 +161,7 @@ class Harness:
             if not instructions_file.exists() or not test_script.exists() or not task_yaml_file.exists():
                 continue
 
-            with task_yaml_file.open() as f:
+            with task_yaml_file.open(encoding="utf-8") as f:
                 task_yaml = yaml.safe_load(f) or {}
 
             task_info_data = task_yaml.get("task_info")
@@ -413,7 +413,7 @@ class Harness:
                     test_duration_seconds=test_duration,
                 )
                 results_file = run_dir / "test_results.json"
-                results_file.write_text(json.dumps(result_data, indent=2))
+                results_file.write_text(json.dumps(result_data, indent=2), encoding="utf-8")
                 logger.info(f"Test score: {trial_result.score}, metadata: {trial_result.metadata}")
                 return trial_result
             else:
@@ -614,7 +614,7 @@ class Harness:
 
             # Write aggregated results to base directory
             aggregated_file = base_run_dir / "aggregated_results.json"
-            aggregated_file.write_text(aggregated_result.model_dump_json(indent=2))
+            aggregated_file.write_text(aggregated_result.model_dump_json(indent=2), encoding="utf-8")
             logger.info(
                 f"Aggregated results for {task_name}: mean={aggregated_result.mean_score:.1f}%, "
                 f"std_dev={aggregated_result.std_dev:.1f}%, range=[{aggregated_result.min_score:.1f}%, {aggregated_result.max_score:.1f}%]"

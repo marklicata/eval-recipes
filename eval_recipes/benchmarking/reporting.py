@@ -1,12 +1,11 @@
 import asyncio
+import contextlib
 import inspect
 import json
 import os
 from pathlib import Path
-import platform
 import shutil
 import tempfile
-import time
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from dotenv import load_dotenv
@@ -16,44 +15,6 @@ from loguru import logger
 from eval_recipes.benchmarking.semantic_test import semantic_test
 
 load_dotenv()
-
-
-def windows_safe_file_operation(operation, max_retries=5, delay=0.5):
-    """
-    Retry file operations on Windows with exponential backoff.
-    
-    Windows often locks files temporarily during cleanup operations, especially
-    when dealing with subprocess pipes and async I/O. This helper retries the
-    operation with increasing delays to handle these transient locks.
-    
-    Args:
-        operation: Callable that performs the file operation
-        max_retries: Maximum number of retry attempts (default: 5)
-        delay: Initial delay between retries in seconds (default: 0.5)
-    
-    Returns:
-        The result of the operation
-        
-    Raises:
-        OSError or PermissionError: If all retries are exhausted
-    """
-    for attempt in range(max_retries):
-        try:
-            return operation()
-        except (OSError, PermissionError) as e:
-            if attempt == max_retries - 1:
-                # Last attempt failed, re-raise the exception
-                raise
-            if platform.system() == "Windows":
-                wait_time = delay * (2 ** attempt)
-                logger.debug(
-                    f"File operation failed (attempt {attempt + 1}/{max_retries}), "
-                    f"retrying in {wait_time:.1f}s: {e}"
-                )
-                time.sleep(wait_time)
-            else:
-                # On non-Windows systems, don't retry - fail fast
-                raise
 
 
 TASK_REPORT_SYSTEM_PROMPT = """You are an expert at analyzing benchmark task failures. Your goal is to identify WHY an agent failed at a task.
@@ -143,7 +104,7 @@ async def generate_task_report(
         return
 
     # Load aggregated results to find which trials need reports
-    with aggregated_results_path.open() as f:
+    with aggregated_results_path.open(encoding="utf-8") as f:
         aggregated_data = json.load(f)
 
     trials_data = aggregated_data.get("trials", [])
@@ -240,7 +201,7 @@ async def generate_task_report(
             # Get the report from the temp dir and move it to the trial directory
             report_path = temp_dir / "FAILURE_REPORT.md"
             if report_path.exists():
-                generated_content = report_path.read_text()
+                generated_content = report_path.read_text(encoding="utf-8")
                 # Prepend metadata header to each report
                 metadata_header = f"""---
 **Task**: {task_name}
@@ -252,20 +213,17 @@ async def generate_task_report(
                 final_content = metadata_header + generated_content
 
                 output_path = trial_dir / f"FAILURE_REPORT_trial_{trial_number}.md"
-                output_path.write_text(final_content)
+                output_path.write_text(final_content, encoding="utf-8")
                 logger.info(f"Failure report for trial {trial_number} saved to: {output_path}")
         finally:
             if temp_dir.exists():
-                # Add delay on Windows before cleanup to allow file handles to close
-                if platform.system() == "Windows":
-                    time.sleep(0.5)
-                windows_safe_file_operation(
-                    lambda: shutil.rmtree(temp_dir)
-                )
+                # Best effort cleanup - don't fail if Windows has file locks
+                with contextlib.suppress(Exception):
+                    shutil.rmtree(temp_dir)
 
 
 CONSOLIDATED_REPORT_SYSTEM_PROMPT = """You are an expert at synthesizing benchmark failure analysis reports and you will be synthesizing across many such reports. \
-It is critical that your final report is factual and accurate based on the provided reports. \
+It is critical that your final report is factual and accurate based on the provided report`s. \
 Do not make assumptions and inferences that are not directly supported by the reports.
 
 ABOUT BENCHMARKING:
@@ -435,7 +393,7 @@ async def generate_summary_report(benchmarks_output_dir: Path) -> None:
         # Collect all failure reports for this agent
         failure_reports = []
         for run_dir_name, report_path in reports:
-            content = report_path.read_text()
+            content = report_path.read_text(encoding="utf-8")
             failure_reports.append(f"## Report for Task: {run_dir_name}\n\n{content}\n\n{'=' * 80}\n")
 
         temp_dir = Path(tempfile.mkdtemp(prefix=f"benchmark_consolidated_report_{agent_name}_"))
@@ -478,24 +436,20 @@ async def generate_summary_report(benchmarks_output_dir: Path) -> None:
             # Get the report from the temp dir and move it to the benchmark output dir
             if report_path.exists():
                 output_path = benchmarks_output_dir / f"CONSOLIDATED_REPORT_{agent_name}.md"
-                # Use retry wrapper for Windows file locking issues
-                windows_safe_file_operation(
-                    lambda: shutil.copy2(report_path, output_path)
-                )
+                with contextlib.suppress(Exception):
+                    shutil.copy2(report_path, output_path)
                 logger.info(f"Consolidated report for '{agent_name}' saved to: {output_path}")
             else:
                 logger.warning(f"No consolidated report was generated for agent '{agent_name}'. Check the logs.")
                 # Create a placeholder
                 output_path = benchmarks_output_dir / f"CONSOLIDATED_REPORT_{agent_name}.md"
                 output_path.write_text(
-                    f"# Consolidated Report for {agent_name}\n\nNo report was generated. Check the logs for details.\n"
+                    f"# Consolidated Report for {agent_name}\n\nNo report was generated. Check the logs for details.\n",
+                    encoding="utf-8",
                 )
 
         finally:
             if temp_dir.exists():
-                # Add delay on Windows before cleanup to allow file handles to close
-                if platform.system() == "Windows":
-                    time.sleep(0.5)
-                windows_safe_file_operation(
-                    lambda: shutil.rmtree(temp_dir)
-                )
+                # Best effort cleanup - don't fail if Windows has file locks
+                with contextlib.suppress(Exception):
+                    shutil.rmtree(temp_dir)
